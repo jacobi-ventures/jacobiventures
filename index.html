@@ -1,18 +1,227 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jacobi Ventures</title>
-    <style>
-        body, html { margin: 0; padding: 0; overflow: hidden; background: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .animation-container { width: 50vw; height: 50vw; max-width: 500px; max-height: 500px; }
-        iframe { border: none; width: 100%; height: 100%; border-radius: 50%; }
-    </style>
+  <meta charset="UTF-8" />
+  <title>Liquid Metal Effect</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      background: #fff; /* White background */
+      overflow: hidden;
+    }
+    canvas {
+      display: block; /* Remove scrollbars */
+    }
+  </style>
 </head>
 <body>
-    <div class="animation-container">
-        <iframe src="https://liquid.paper.design/share/01JN6Z6B3Z2YAJNRRSC33J5YFD?refraction=0.015&edge=1&patternBlur=0.013&liquid=0.07&speed=0.25&patternScale=2&background=white" allowfullscreen></iframe>
-    </div>
+<canvas id="liquidCanvas"></canvas>
+
+<!-- THREE.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<!-- A lightweight Simplex noise implementation for the shaders (optional) -->
+<script id="simplex-noise" type="x-shader/x-vertex">
+/* Simplex noise in GLSL from https://github.com/ashima/webgl-noise */
+vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x,289.0);}
+vec2 fade(vec2 t){return t*t*t*(t*(t*6.0-15.0)+10.0);}
+
+float noise(vec2 P){
+  vec2 i = floor(P), f = fract(P);
+  vec4 X = i.x + vec4(0.0,1.0,0.0,1.0),
+       Y = i.y + vec4(0.0,0.0,1.0,1.0);
+  X = mod(X,289.0); Y = mod(Y,289.0);
+  vec4 gx = mod(X,7.0)* (1.0/7.0);
+  vec4 gy = floor(X * (1.0/7.0))* (1.0/7.0);
+  vec4 gz = mod(Y,7.0)* (1.0/7.0);
+  vec4 gw = floor(Y * (1.0/7.0))* (1.0/7.0);
+  vec4 rx = fract(gx*2.299)+.35; gx = floor(gx*2.299);
+  vec4 ry = fract(gy*2.299)+.35; gy = floor(gy*2.299);
+  vec4 rz = fract(gz*2.299)+.35; gz = floor(gz*2.299);
+  vec4 rw = fract(gw*2.299)+.35; gw = floor(gw*2.299);
+
+  vec4 vx = gx*7.0+gz; vec4 vy = gy*7.0+gw;
+  vec4 ixy = permute(permute(vx)+vy);
+
+  vec4 tx = fract(ixy*(1.0/41.0));
+  vec4 ty = floor(ixy*(1.0/41.0))*(1.0/7.0);
+  vec4 tz = fract(ty*(1.0/7.0));
+  ty = floor(ty);
+  vec4 tw = fract(tz*(1.0/7.0));
+  tz = floor(tz);
+
+  vec4 i0 = step(tx,rx)*step(ty,ry)*step(tz,rz),
+       i1 = step(tx-rx,rx-tx)*step(ty-ry,ry-ty)*step(tz-rz,rz-tz);
+
+  vec2 f0 = vec2(dot(i0.xy,vec2(f.x,f.y)),dot(i0.zw,vec2(f.x,f.y)));
+  vec2 f1 = vec2(dot(i1.xy,vec2(f.x,f.y)),dot(i1.zw,vec2(f.x,f.y)));
+  return dot(fade(f),vec2(f0.x+f1.x,f0.y+f1.y));
+}
+</script>
+
+<!-- Vertex Shader -->
+<script id="vertexShader" type="x-shader/x-vertex">
+uniform float uTime;
+uniform float uSpeed;
+uniform float uNoiseScale;
+uniform float uLiquidStrength;
+
+// Simplex noise from snippet above
+float simplexNoise(vec2 uv);
+
+varying vec2 vUv;
+varying float vDistortion;
+
+void main() {
+  vUv = uv;
+
+  // Basic wave from the simplex noise
+  // We'll scale uv by uNoiseScale to get bigger or smaller patterns
+  vec2 noiseUV = uv * uNoiseScale;
+
+  float n = simplexNoise(noiseUV + uTime * uSpeed);
+
+  // Distortion is scaled by uLiquidStrength
+  // We can push the plane's Z a bit for a wavy surface
+  float distortion = n * uLiquidStrength;
+
+  // Save for fragment
+  vDistortion = distortion;
+
+  // Project with wave offset
+  vec3 newPosition = position + normal * distortion;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+}
+</script>
+
+<!-- Fragment Shader -->
+<script id="fragmentShader" type="x-shader/x-fragment">
+uniform float uTime;
+uniform float uSpeed;
+uniform float uNoiseScale;
+uniform float uRefraction;
+uniform float uEdge;
+uniform float uPatternBlur;
+uniform float uLiquidStrength;
+
+varying vec2 vUv;
+varying float vDistortion;
+
+// Simplex noise from snippet above
+float simplexNoise(vec2 uv);
+
+void main() {
+  // We’ll do a second pass of noise for color swirl
+  vec2 noiseUV = vUv * uNoiseScale + uTime * uSpeed;
+  float noiseValue = simplexNoise(noiseUV);
+
+  // Basic color gradient: black at minima -> white at maxima
+  // Adjust to your taste
+  vec3 baseColor = mix(vec3(0.0), vec3(1.0), noiseValue);
+
+  // “Refraction” effect: shift the uv slightly by distortion
+  // (very simplified refraction)
+  float refractionOffset = vDistortion * uRefraction;
+  float finalNoise = simplexNoise(noiseUV + refractionOffset);
+
+  // We'll modulate the color again based on finalNoise
+  // e.g. a metallic look by inverting or saturating
+  float metallicFactor = 0.5 + 0.5 * sin(uTime + finalNoise * 10.0);
+  vec3 metallicColor = mix(baseColor, vec3(0.8, 0.8, 0.9), metallicFactor);
+
+  // You could add an “edge” effect if desired:
+  // A slight difference between noiseValue and finalNoise => highlight edges
+  float edgeFactor = smoothstep(0.0, 1.0, abs(noiseValue - finalNoise) * uEdge);
+
+  // Combine everything
+  vec3 finalColor = mix(metallicColor, vec3(1.0), edgeFactor * uPatternBlur);
+
+  gl_FragColor = vec4(finalColor, 1.0);
+}
+</script>
+
+<script>
+// -- MAIN SCRIPT --
+
+const canvas = document.querySelector('#liquidCanvas');
+const renderer = new THREE.WebGLRenderer({ canvas });
+renderer.setSize(window.innerWidth, window.innerHeight);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(
+  75, 
+  window.innerWidth / window.innerHeight, 
+  0.1, 
+  100
+);
+camera.position.z = 2;
+
+// Create a plane that fills the screen
+const geometry = new THREE.PlaneBufferGeometry(2, 2, 256, 256);
+
+// Custom uniforms to match Liquid Paper-like parameters
+const uniforms = {
+  uTime:          { value: 0.0 },
+  uSpeed:         { value: 0.25 },       // like speed=0.25
+  uNoiseScale:    { value: 2.0 },        // like patternScale=2
+  uRefraction:    { value: 0.015 },      // like refraction=0.015
+  uEdge:          { value: 1.0 },        // like edge=1
+  uPatternBlur:   { value: 0.013 },      // like patternBlur=0.013
+  uLiquidStrength:{ value: 0.07 },       // like liquid=0.07
+};
+
+// Create a ShaderMaterial using the embedded scripts
+const material = new THREE.ShaderMaterial({
+  vertexShader: document.getElementById('vertexShader').textContent,
+  fragmentShader: document.getElementById('fragmentShader').textContent,
+  uniforms,
+  // Turn on side or blending if needed
+});
+
+// Finally, create the mesh
+const mesh = new THREE.Mesh(geometry, material);
+scene.add(mesh);
+
+// Animate
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+
+  // Update time
+  uniforms.uTime.value = clock.getElapsedTime();
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+// Handle resizing
+window.addEventListener('resize', () => {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+});
+
+// Inject the “simplexNoise” function from the <script id="simplex-noise"> into both shaders
+function injectNoiseCode() {
+  const noiseCode = document.getElementById('simplex-noise').textContent;
+
+  // Vertex
+  const vs = document.getElementById('vertexShader').textContent;
+  const newVS = noiseCode.replace('float noise(vec2 P)', 'float simplexNoise(vec2 P)') + vs;
+  material.vertexShader = newVS;
+
+  // Fragment
+  const fs = document.getElementById('fragmentShader').textContent;
+  const newFS = noiseCode.replace('float noise(vec2 P)', 'float simplexNoise(vec2 P)') + fs;
+  material.fragmentShader = newFS;
+
+  material.needsUpdate = true;
+}
+injectNoiseCode();
+</script>
 </body>
 </html>
