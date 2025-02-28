@@ -6,66 +6,10 @@
     <title>Jacobi Ventures</title>
     <style>
         body, html { margin: 0; padding: 0; overflow: hidden; background: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        canvas { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        iframe { border: none; width: 80vw; height: 80vh; }
     </style>
 </head>
 <body>
-    <canvas id="liquidCanvas"></canvas>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FontLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/geometries/TextGeometry.js"></script>
-    <script>
-        const canvas = document.querySelector('#liquidCanvas');
-        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-
-        const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.z = 5;
-
-        const light1 = new THREE.PointLight(0xffffff, 1);
-        light1.position.set(5, 5, 5);
-        scene.add(light1);
-
-        const fontLoader = new THREE.FontLoader();
-        fontLoader.load('https://threejs.org/examples/fonts/helvetiker_bold.typeface.json', (font) => {
-            const textGeometry = new THREE.TextGeometry('JV', {
-                font: font,
-                size: 1.5,
-                height: 0.5,
-                curveSegments: 12,
-                bevelEnabled: true,
-                bevelThickness: 0.05,
-                bevelSize: 0.02,
-                bevelOffset: 0,
-                bevelSegments: 5
-            });
-
-            const textMaterial = new THREE.MeshPhysicalMaterial({ 
-                color: 0x000000, 
-                metalness: 0.7, 
-                roughness: 0.2, 
-                clearcoat: 1.0, 
-                clearcoatRoughness: 0.1 
-            });
-
-            const liquidText = new THREE.Mesh(textGeometry, textMaterial);
-            liquidText.position.x = -1.5;
-            scene.add(liquidText);
-
-            function animate() {
-                requestAnimationFrame(animate);
-                liquidText.rotation.y += 0.01;
-                renderer.render(scene, camera);
-            }
-            animate();
-        });
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-    </script>
+    <iframe src="https://liquid.paper.design/share/01JN6Z6B3Z2YAJNRRSC33J5YFD?refraction=0.015&edge=1&patternBlur=0.013&liquid=0.07&speed=0.25&patternScale=2&background=white" allowfullscreen></iframe>
 </body>
 </html>
